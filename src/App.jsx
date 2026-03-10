@@ -86,18 +86,6 @@ function Btn({ label, sublabel, color, bg, onClick, red }) {
   );
 }
 
-// ─── Drop flash dot ───────────────────────────────────────────────────────────
-function DropFlash({ flash }) {
-  return (
-    <div style={{
-      width:9, height:9, borderRadius:"50%",
-      background: flash ? "#00cc44" : "#b0c8b0",
-      boxShadow: flash ? "0 0 7px #00cc44" : "none",
-      transition: "all 0.05s", display:"inline-block",
-    }}/>
-  );
-}
-
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function DripitoV2() {
   // drip set
@@ -117,7 +105,7 @@ export default function DripitoV2() {
   const [instFlowMlh,  setInstFlowMlh]  = useState(0);    // single-interval
   const [totalMl,      setTotalMl]      = useState(0);
   const [elapsedMs,    setElapsedMs]    = useState(0);
-  const [dropFlash,    setDropFlash]    = useState(false);
+
 
   // UI state
   const [screen,    setScreen]    = useState(S.BOOT);
@@ -191,10 +179,6 @@ export default function DripitoV2() {
     // Only register drops in monitoring screens
     const valid = [S.MAIN,S.ARMED,S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.MEASURING];
     if (!valid.includes(curScr)) return;
-
-    // Visual flash
-    setDropFlash(true);
-    setTimeout(() => setDropFlash(false), 80);
 
     // Reset no-flow watchdog
     resetNoFlowTimer();
@@ -364,12 +348,6 @@ export default function DripitoV2() {
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10, paddingBottom:7, borderBottom:"1px solid #ddd" }}>
               <span style={{ fontSize:12, fontWeight:700, color:"#2a4a2a", letterSpacing:"0.06em" }}>DRIPITO</span>
               <span style={{ fontSize:9, color:"#aaa" }}>V2 PROTOTYPE</span>
-              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                <DropFlash flash={dropFlash}/>
-                <div style={{ width:8, height:8, borderRadius:"50%", transition:"all 0.2s",
-                  background: alLv==="HIGH"?"#ff3030":alLv==="WARN"?"#ffb000":[S.BOOT,S.MEASURING].includes(screen)?"#ffa020":"#30c030",
-                  boxShadow:`0 0 5px ${alLv==="HIGH"?"#ff3030":alLv==="WARN"?"#ffb000":[S.BOOT,S.MEASURING].includes(screen)?"#ffa020":"#30c030"}` }}/>
-              </div>
             </div>
             {/* LCD */}
             <div style={{ display:"flex", justifyContent:"center", marginBottom:14 }}>
