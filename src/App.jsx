@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import DripitoSim from "./DripitoSim";
 
 const LCD_FONT_URL = "https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap";
 
@@ -610,6 +611,43 @@ export default function DripitoV2() {
 
       <div style={{ maxWidth:920, margin:"14px auto 0", fontSize:9, color:"#9aaa9a", textAlign:"center", lineHeight:1.8 }}>
         Clinical: ±15% warn · ±25% alarm · NICE CG174 · IEC 60601-2-24 · Atanda et al. PMC 2023
+      </div>
+
+      {/* ── SIMULATION SECTION ─────────────────────────────────────────────── */}
+      <div style={{ maxWidth:1400, margin:"28px auto 0" }}>
+        {/* Section divider */}
+        <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:14 }}>
+          <div style={{ flex:1, height:1, background:"linear-gradient(to right, transparent, #c8d8c8)" }}/>
+          <div style={{
+            fontSize:10, letterSpacing:"0.18em", color:"#4a7a4a", fontWeight:700,
+            textTransform:"uppercase", whiteSpace:"nowrap",
+            fontFamily:"'Share Tech Mono','Courier New',monospace",
+          }}>
+            Physics Simulation — Dual-Beam Sensor Module
+          </div>
+          <div style={{ flex:1, height:1, background:"linear-gradient(to left, transparent, #c8d8c8)" }}/>
+        </div>
+
+        {/* Sim description blurb */}
+        <p style={{
+          fontSize:10, color:"#6a8a6a", marginBottom:12, lineHeight:1.7,
+          fontFamily:"'Share Tech Mono','Courier New',monospace",
+          background:"#f4f8f4", border:"1px solid #d8e8d8", borderRadius:6,
+          padding:"8px 14px",
+        }}>
+          The simulation below shows the Dripito sensor module (left) clipped onto a transparent drip chamber.
+          Two IR beams — TX\u2081/RX\u2081 and TX\u2082/RX\u2082 — detect each drop in real time.
+          Transit time \u0394t between the beams is used to estimate drop velocity and volume without nurse interaction.
+        </p>
+
+        {/* Dark sim panel */}
+        <div style={{
+          borderRadius:12, overflow:"hidden",
+          border:"1.5px solid #1a2a1a",
+          boxShadow:"0 8px 32px rgba(0,0,0,0.25)",
+        }}>
+          <DripitoSim />
+        </div>
       </div>
     </div>
   );
