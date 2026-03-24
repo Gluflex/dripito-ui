@@ -55,10 +55,12 @@ const FLUIDS = {
   d10w:  { name: "D10W (10% Dextrose)", gamma: 64.0, rho: 1040, color: "#f0d080", nozzleDia: 4.0 },
 };
 
-export default function DripitoSim() {
+export default function DripitoSim({ onDrop }) {
   const canvasRef     = useRef(null);
   const scopeCanvasRef = useRef(null);
   const animRef        = useRef(null);
+  const onDropRef      = useRef(onDrop);
+  useEffect(() => { onDropRef.current = onDrop; }, [onDrop]);
 
   const [fluidType, setFluidType] = useState("nacl");
   const [dropRate,  setDropRate]  = useState(1.5);
@@ -191,6 +193,7 @@ export default function DripitoSim() {
                 const vEst = sphereVolume(dAvg);
 
                 s.dropCount++;
+                onDropRef.current?.();
                 const meas = {
                   idx: s.dropCount, dt: dt_transit * 1000,
                   v1: v1 / 1000, v2: v2 / 1000,

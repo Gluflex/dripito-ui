@@ -36,11 +36,11 @@ function LCD({ lines, alarmLevel }) {
   return (
     <div style={{
       background: bg, border: "2px solid #6a7a40", borderRadius: "3px",
-      padding: "9px 13px 10px",
+      padding: "6px 10px 7px",
       fontFamily: "'Share Tech Mono','Courier New',monospace",
-      fontSize: "14.5px", letterSpacing: "0.13em", lineHeight: "1.7em",
+      fontSize: "12px", letterSpacing: "0.09em", lineHeight: "1.65em",
       boxShadow: "inset 0 1px 6px rgba(0,0,0,0.22)",
-      minWidth: "255px", position: "relative", userSelect: "none",
+      minWidth: "210px", position: "relative", userSelect: "none",
       transition: "background 0.15s",
     }}>
       <style>{`@import url('${LCD_FONT_URL}');`}</style>
@@ -488,7 +488,7 @@ export default function DripitoV2() {
           </div>
           <div style={{ borderRadius:10, overflow:"hidden", border:"1.5px solid #1a2a1a",
             boxShadow:"0 4px 24px rgba(0,0,0,0.5)" }}>
-            <DripitoSim />
+            <DripitoSim onDrop={registerDrop} />
           </div>
         </div>
       </div>
