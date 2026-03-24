@@ -278,18 +278,18 @@ export default function DripitoV2() {
     switch(screen) {
       case S.BOOT:       return ["                ","  Dripito  V2   ","    ETHZ GHE    ", blink?"                ":"   Loading...   "];
       case S.MEASURING:  return ["-- Measuring -- ",`Flow:${flow} mL/h`,`Drops: ${String(dropCount).padStart(5," ")}   `, blink?"  Please wait.. ":"  Stabilising.. "];
-      case S.MAIN:       return [`Flow:${flow} mL/h`, infoRow(),`${bat}  ${gttStr}gtt/mL`,"[SET]arm [MODE]+"];
-      case S.ARMED:      return [`Flow:${flow} mL/h`, infoRow(),`Tgt:${String(Math.round(armedFlow)).padStart(4," ")} ${bat}  `,"[MODE]+ [MUTE]  "];
+      case S.MAIN:       return [`Flow:${flow} mL/h`, infoRow(),`${bat}  ${gttStr}gtt/mL`,"[ALM]arm [MODE] "];
+      case S.ARMED:      return [`Flow:${flow} mL/h`, infoRow(),`Tgt:${String(Math.round(armedFlow)).padStart(4," ")} ${bat}  `,"[ALM]off [MODE] "];
       case S.ALARM_WARN: {
         const sign=devP>=0?"+":"-"; const p=Math.abs(devP).toFixed(0).padStart(2," ");
-        return [blinkFast?"> RATE SHIFT <  ":`Flow:${flow} mL/h`,`Dev:${sign}${p}%      `,`Tgt:${String(Math.round(armedFlow)).padStart(4," ")} mL/h  `,"[MUTE] silence  "];
+        return [blinkFast?"> RATE SHIFT <  ":`Flow:${flow} mL/h`,`Dev:${sign}${p}%      `,`Tgt:${String(Math.round(armedFlow)).padStart(4," ")} mL/h  `,"[ALM] silence   "];
       }
       case S.ALARM_HIGH: {
         const sign=devP>=0?"+":"-"; const p=Math.abs(devP).toFixed(0).padStart(2," ");
-        return [blinkFast?"!! RATE ALARM !!":"                ",`Flow:${flow} mL/h`,`Dev:${sign}${p}%    !!!`,"[MUTE] silence  "];
+        return [blinkFast?"!! RATE ALARM !!":"                ",`Flow:${flow} mL/h`,`Dev:${sign}${p}%    !!!`,"[ALM] silence   "];
       }
-      case S.ALARM_NOFLOW: return [blinkFast?"!! NO  FLOW !!!!":"                ",`Last:${String(Math.round(armedFlow||flowMlh)).padStart(4," ")} mL/h`,`${totalMl.toFixed(1).padStart(5," ")} mL infused`,"[MUTE] silence  "];
-      case S.ALARM_LOWBAT: return [blinkFast?"!! LOW BATTERY !":"LOW BATTERY     ",`BAT: ~${batPct}% left   `,`${totalMl.toFixed(1).padStart(5," ")} mL infused`,"[MUTE] silence  "];
+      case S.ALARM_NOFLOW: return [blinkFast?"!! NO  FLOW !!!!":"                ",`Last:${String(Math.round(armedFlow||flowMlh)).padStart(4," ")} mL/h`,`${totalMl.toFixed(1).padStart(5," ")} mL infused`,"[ALM] silence   "];
+      case S.ALARM_LOWBAT: return [blinkFast?"!! LOW BATTERY !":"LOW BATTERY     ",`BAT: ~${batPct}% left   `,`${totalMl.toFixed(1).padStart(5," ")} mL infused`,"[ALM] silence   "];
       default: return ["","","",""];
     }
   }
@@ -300,17 +300,14 @@ export default function DripitoV2() {
     else if ([S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.ALARM_LOWBAT].includes(screen))
       setScreen(armedFlow?S.ARMED:S.MAIN);
   }
-  function handleSet() {
-    if ([S.MAIN,S.MEASURING,S.ARMED].includes(screen) && flowMlh>0) {
-      setArmedFlow(flowMlh); setScreen(S.ARMED);
+  function handleAlarm() {
+    if ([S.MAIN,S.MEASURING].includes(screen) && flowMlh>0) {
+      setArmedFlow(flowMlh); setScreen(S.ARMED);           // arm
+    } else if (screen===S.ARMED) {
+      setArmedFlow(null); setScreen(S.MAIN);               // disarm
+    } else if ([S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.ALARM_LOWBAT].includes(screen)) {
+      setScreen(armedFlow?S.ARMED:S.MAIN);                 // silence
     }
-  }
-  function handlePlus() {
-    if ([S.ARMED,S.ALARM_WARN,S.ALARM_HIGH].includes(screen)) { setArmedFlow(null); setScreen(S.MAIN); }
-  }
-  function handleMute() {
-    if ([S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.ALARM_LOWBAT].includes(screen))
-      setScreen(armedFlow?S.ARMED:S.MAIN);
   }
 
   function hardReset() {
@@ -321,14 +318,21 @@ export default function DripitoV2() {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
+  const alarmBg = [S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.ALARM_LOWBAT].includes(screen)
+    ? "#f0e0e0" : screen===S.ARMED ? "#fff8e0" : flowMlh>0 ? "#e0f0e0" : "#e8e8e8";
+  const alarmColor = [S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.ALARM_LOWBAT].includes(screen)
+    ? "#aa1111" : screen===S.ARMED ? "#8a6a00" : flowMlh>0 ? "#1a6a1a" : "#888";
+  const alarmSublabel = [S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.ALARM_LOWBAT].includes(screen)
+    ? "silence" : screen===S.ARMED ? "disarm" : "arm";
+
   return (
     <div style={{ minHeight:"100vh", background:"#0f1210",
       backgroundImage:"radial-gradient(ellipse at 30% 0%,#0d1a0d 0%,transparent 50%),radial-gradient(ellipse at 70% 100%,#0d1018 0%,transparent 50%)",
-      fontFamily:"'Share Tech Mono','Courier New',monospace", color:"#b0c8b0", padding:"22px 14px" }}>
+      fontFamily:"'Share Tech Mono','Courier New',monospace", color:"#b0c8b0", padding:"16px 14px 28px" }}>
       <style>{`@import url('${LCD_FONT_URL}');`}</style>
 
       {/* Header */}
-      <div style={{ maxWidth:920, margin:"0 auto 18px" }}>
+      <div style={{ maxWidth:1400, margin:"0 auto 12px" }}>
         <div style={{ display:"flex", alignItems:"baseline", gap:12 }}>
           <span style={{ fontSize:22, fontWeight:700, color:"#44cc44" }}>Dripito V2</span>
           <span style={{ fontSize:10, color:"#4a7a4a", letterSpacing:"0.16em" }}>UI SPEC · Rev-B · ETHZ GHE</span>
@@ -336,79 +340,97 @@ export default function DripitoV2() {
         <div style={{ fontSize:10, color:"#4a6a4a", marginTop:1 }}>EA DOGS164W-A · 4×16 · STM32G030 · Real drop-counting logic</div>
       </div>
 
-      <div style={{ maxWidth:920, margin:"0 auto", display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
+      {/* ── 3-column main layout ── */}
+      <div style={{ maxWidth:1400, margin:"0 auto",
+        display:"grid", gridTemplateColumns:"270px 300px 1fr", gap:14, alignItems:"start" }}>
 
-        {/* ── LEFT ── */}
-        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+        {/* ── COL 1: Device ── */}
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
 
-          {/* Device */}
+          {/* Dripito casing — intentionally white */}
           <div style={{ background:"linear-gradient(160deg,#fff 0%,#f0f0ee 60%,#e4e4e0 100%)",
             border:"1.5px solid #c8c8c4", borderRadius:14, padding:"16px 14px 18px",
-            boxShadow:"0 6px 24px rgba(0,0,0,0.13),inset 0 1px 0 rgba(255,255,255,0.9)" }}>
-            {/* brand bar */}
+            boxShadow:"0 6px 24px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.9)" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10, paddingBottom:7, borderBottom:"1px solid #ddd" }}>
               <span style={{ fontSize:12, fontWeight:700, color:"#2a4a2a", letterSpacing:"0.06em" }}>DRIPITO</span>
               <span style={{ fontSize:9, color:"#aaa" }}>V2 PROTOTYPE</span>
             </div>
-            {/* LCD */}
             <div style={{ display:"flex", justifyContent:"center", marginBottom:14 }}>
               <div style={{ background:"#1a1a1a", padding:"6px 8px", borderRadius:5, boxShadow:"inset 0 2px 8px rgba(0,0,0,0.5)" }}>
                 <LCD lines={getLines()} alarmLevel={alLv}/>
               </div>
             </div>
-            {/* Buttons */}
-            <div style={{ display:"flex", justifyContent:"center", gap:6 }}>
+            <div style={{ display:"flex", justifyContent:"center", gap:12 }}>
               <Btn label="MODE" sublabel="view/nav" onClick={handleMode}/>
-              <Btn label="SET"  sublabel="arm alarm" color="#1a6a1a" bg="#e0f0e0" onClick={handleSet}/>
-              <Btn label="+"    sublabel="disarm"    onClick={handlePlus}/>
-              <Btn label="MUTE" sublabel="silence"   red onClick={handleMute}/>
+              <Btn label="ALARM" sublabel={alarmSublabel} bg={alarmBg} color={alarmColor} onClick={handleAlarm}/>
             </div>
             <div style={{ textAlign:"center", marginTop:9, fontSize:9, color:"#bbb" }}>↓ CLIP-ON · IV DRIP CHAMBER ↓</div>
           </div>
 
-          {/* Drop simulator panel */}
+          {/* Screen jumps */}
+          <div style={{ background:"#161d16", border:"1px solid #2a3a2a", borderRadius:8, padding:"10px 12px" }}>
+            <div style={{ fontSize:10, letterSpacing:"0.13em", color:"#4a7a4a", marginBottom:6 }}>JUMP TO SCREEN</div>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+              {[
+                {l:"Boot",s:S.BOOT},{l:"Measuring",s:S.MEASURING},{l:"Main",s:S.MAIN},
+                {l:"Armed",s:S.ARMED},{l:"⚠ Warn",s:S.ALARM_WARN},{l:"🔴 Alarm",s:S.ALARM_HIGH},
+                {l:"No Flow",s:S.ALARM_NOFLOW},{l:"Low Bat",s:S.ALARM_LOWBAT},
+              ].map(({l,s}) => (
+                <button key={s} onClick={() => {
+                  if(s===S.BOOT){bootDone.current=false;}
+                  if(s===S.MEASURING){measDone.current=false;}
+                  if([S.ARMED,S.ALARM_WARN,S.ALARM_HIGH].includes(s)&&flowMlh>0) setArmedFlow(flowMlh);
+                  setScreen(s);
+                }} style={{
+                  background:screen===s?"#1a3a1a":"#161d16",
+                  border:`1px solid ${screen===s?"#3a8a3a":"#2a402a"}`,
+                  borderRadius:4, color:screen===s?"#5aee5a":"#4a7a4a",
+                  fontSize:9, padding:"3px 7px", cursor:"pointer",
+                  fontFamily:"'Share Tech Mono',monospace",
+                }}>{l}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── COL 2: Controls ── */}
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+
+          {/* Drop simulator */}
           <div style={{ background:"#161d16", border:"1.5px solid #2a402a", borderRadius:10, padding:"14px",
             boxShadow:"0 2px 8px rgba(0,0,0,0.4)" }}>
-            <div style={{ fontSize:10, letterSpacing:"0.15em", color:"#5a9a5a", marginBottom:12, textTransform:"uppercase" }}>
+            <div style={{ fontSize:10, letterSpacing:"0.15em", color:"#5a9a5a", marginBottom:10, textTransform:"uppercase" }}>
               Drop Simulator
             </div>
-
-            {/* Big DROP button */}
-            <div style={{ display:"flex", justifyContent:"center", marginBottom:10 }}>
-              <button
-                onMouseDown={() => registerDrop()}
+            <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}>
+              <button onMouseDown={() => registerDrop()}
                 style={{ background:"linear-gradient(180deg,#2a8a2a 0%,#1a6a1a 100%)",
                   border:"none", borderBottom:"4px solid #0a4a0a", borderRadius:"50%",
-                  width:76, height:76, color:"#fff",
+                  width:72, height:72, color:"#fff",
                   fontFamily:"'Share Tech Mono',monospace", fontSize:"10px", fontWeight:"700",
                   cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center",
-                  justifyContent:"center", boxShadow:"0 4px 12px rgba(0,0,0,0.2)",
+                  justifyContent:"center", boxShadow:"0 4px 12px rgba(0,0,0,0.3)",
                   userSelect:"none", outline:"none", lineHeight:1.4 }}>
-                <span style={{ fontSize:20 }}>💧</span>
+                <span style={{ fontSize:18 }}>💧</span>
                 <span>DROP</span>
               </button>
             </div>
-
-            <div style={{ textAlign:"center", fontSize:9, color:"#5a7a5a", marginBottom:14 }}>
+            <div style={{ textAlign:"center", fontSize:9, color:"#5a7a5a", marginBottom:10 }}>
               Click or&nbsp;
               <kbd style={{ background:"#1e2a1e", border:"1px solid #3a5a3a", borderRadius:3, padding:"1px 5px", fontSize:9, color:"#8ab08a" }}>SPACE</kbd>
             </div>
-
-            {/* Drip set selector */}
-            <div style={{ borderTop:"1px solid #2a3a2a", paddingTop:12 }}>
-              <div style={{ fontSize:10, letterSpacing:"0.13em", color:"#5a9a5a", marginBottom:8, textTransform:"uppercase" }}>
-                Drip Set
-              </div>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            {/* Drip set */}
+            <div style={{ borderTop:"1px solid #2a3a2a", paddingTop:10 }}>
+              <div style={{ fontSize:10, letterSpacing:"0.13em", color:"#5a9a5a", marginBottom:7, textTransform:"uppercase" }}>Drip Set</div>
+              <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
                 {DRIP_SETS.map((ds,i) => (
                   <button key={i} onClick={() => setDripSetIdx(i)} style={{
                     background: dripSetIdx===i?"#1a6a1a":"#1a221a",
                     border:`1.5px solid ${dripSetIdx===i?"#2a8a2a":"#2a402a"}`,
                     borderRadius:5, color:dripSetIdx===i?"#c8f0c8":"#5a8a5a",
-                    fontSize:10, padding:"5px 10px", cursor:"pointer",
+                    fontSize:10, padding:"4px 8px", cursor:"pointer",
                     fontFamily:"'Share Tech Mono',monospace",
-                    fontWeight:dripSetIdx===i?"700":"400", transition:"all 0.1s",
-                    lineHeight:1.4,
+                    fontWeight:dripSetIdx===i?"700":"400", transition:"all 0.1s", lineHeight:1.4,
                   }}>
                     <div style={{ fontWeight:700 }}>{ds.gtt} gtt</div>
                     <div style={{ fontSize:8, opacity:0.75, marginTop:1 }}>{ds.note.split("–")[0].trim()}</div>
@@ -457,38 +479,25 @@ export default function DripitoV2() {
               </button>
             </div>
           </div>
-
-          {/* Screen jumps */}
-          <div>
-            <div style={{ fontSize:10, letterSpacing:"0.13em", color:"#4a7a4a", marginBottom:5 }}>JUMP TO SCREEN</div>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
-              {[
-                {l:"Boot",s:S.BOOT},{l:"Measuring",s:S.MEASURING},{l:"Main",s:S.MAIN},
-                {l:"Armed",s:S.ARMED},{l:"⚠ Warn",s:S.ALARM_WARN},{l:"🔴 Alarm",s:S.ALARM_HIGH},
-                {l:"No Flow",s:S.ALARM_NOFLOW},{l:"Low Bat",s:S.ALARM_LOWBAT},
-              ].map(({l,s}) => (
-                <button key={s} onClick={() => {
-                  if(s===S.BOOT){bootDone.current=false;}
-                  if(s===S.MEASURING){measDone.current=false;}
-                  if([S.ARMED,S.ALARM_WARN,S.ALARM_HIGH].includes(s)&&flowMlh>0) setArmedFlow(flowMlh);
-                  setScreen(s);
-                }} style={{
-                  background:screen===s?"#1a3a1a":"#161d16",
-                  border:`1px solid ${screen===s?"#3a8a3a":"#2a402a"}`,
-                  borderRadius:4, color:screen===s?"#5aee5a":"#4a7a4a",
-                  fontSize:9, padding:"3px 7px", cursor:"pointer",
-                  fontFamily:"'Share Tech Mono',monospace",
-                }}>{l}</button>
-              ))}
-            </div>
-          </div>
         </div>
 
-        {/* ── RIGHT: spec ── */}
-        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-          <div style={{ fontSize:10, letterSpacing:"0.16em", color:"#4a7a4a", textTransform:"uppercase" }}>Design Specification</div>
+        {/* ── COL 3: Physics simulation ── */}
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ fontSize:10, letterSpacing:"0.16em", color:"#4a7a4a", textTransform:"uppercase" }}>
+            Physics Simulation — Dual-Beam IR Sensor
+          </div>
+          <div style={{ borderRadius:10, overflow:"hidden", border:"1.5px solid #1a2a1a",
+            boxShadow:"0 4px 24px rgba(0,0,0,0.5)" }}>
+            <DripitoSim />
+          </div>
+        </div>
+      </div>
 
-          {/* Spec cards */}
+      {/* ── Spec section ── */}
+      <div style={{ maxWidth:1400, margin:"16px auto 0" }}>
+
+        {/* 3 spec cards in a row */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14, marginBottom:14 }}>
           {[
             {
               title:"Drop → Flow Algorithm", color:"#1a6a1a",
@@ -504,10 +513,8 @@ export default function DripitoV2() {
             {
               title:"Button Map", color:"#1a4a9a",
               rows:[
-                ["MODE",  "Cycle row-2: Infused / Elapsed / Drops · dismiss alarm → armed/main"],
-                ["SET",   "Arm alarm to current avg flow · re-arm if already armed"],
-                ["+",     "Disarm alarm (return to unmonitored main)"],
-                ["MUTE",  "Silence active alarm · stay on armed screen"],
+                ["MODE",  "Cycle info row: Infused / Elapsed / Drops · dismiss alarm → armed/main"],
+                ["ALARM", "Main: arm to current avg flow · Armed: disarm · Alarm: silence/dismiss"],
                 ["SPACE", "Keyboard shortcut: simulate a drop"],
               ]
             },
@@ -536,6 +543,10 @@ export default function DripitoV2() {
               ))}
             </div>
           ))}
+        </div>
+
+        {/* Alarm bands + reference table side by side */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
 
           {/* Alarm band visual */}
           <div style={{ background:"#161d16", border:"1px solid #2a3a2a", borderRadius:7, padding:"11px 14px", boxShadow:"0 1px 4px rgba(0,0,0,0.3)" }}>
@@ -585,7 +596,6 @@ export default function DripitoV2() {
               Reference: drops/min for target flow
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:"2px 0", fontSize:9 }}>
-              {/* header */}
               <div style={{ color:"#4a6a4a", borderBottom:"1px solid #2a3a2a", paddingBottom:3 }}>mL/h</div>
               {DRIP_SETS.map(ds=>(
                 <div key={ds.gtt} style={{ color:dripSetIdx===DRIP_SETS.indexOf(ds)?"#44cc44":"#4a6a4a",
@@ -609,45 +619,8 @@ export default function DripitoV2() {
         </div>
       </div>
 
-      <div style={{ maxWidth:920, margin:"14px auto 0", fontSize:9, color:"#3a5a3a", textAlign:"center", lineHeight:1.8 }}>
+      <div style={{ maxWidth:1400, margin:"14px auto 0", fontSize:9, color:"#3a5a3a", textAlign:"center", lineHeight:1.8 }}>
         Clinical: ±15% warn · ±25% alarm · NICE CG174 · IEC 60601-2-24 · Atanda et al. PMC 2023
-      </div>
-
-      {/* ── SIMULATION SECTION ─────────────────────────────────────────────── */}
-      <div style={{ maxWidth:1400, margin:"28px auto 0" }}>
-        {/* Section divider */}
-        <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:14 }}>
-          <div style={{ flex:1, height:1, background:"linear-gradient(to right, transparent, #c8d8c8)" }}/>
-          <div style={{
-            fontSize:10, letterSpacing:"0.18em", color:"#4a7a4a", fontWeight:700,
-            textTransform:"uppercase", whiteSpace:"nowrap",
-            fontFamily:"'Share Tech Mono','Courier New',monospace",
-          }}>
-            Physics Simulation — Dual-Beam Sensor Module
-          </div>
-          <div style={{ flex:1, height:1, background:"linear-gradient(to left, transparent, #c8d8c8)" }}/>
-        </div>
-
-        {/* Sim description blurb */}
-        <p style={{
-          fontSize:10, color:"#6a8a6a", marginBottom:12, lineHeight:1.7,
-          fontFamily:"'Share Tech Mono','Courier New',monospace",
-          background:"#f4f8f4", border:"1px solid #d8e8d8", borderRadius:6,
-          padding:"8px 14px",
-        }}>
-          The simulation below shows the Dripito sensor module (left) clipped onto a transparent drip chamber.
-          Two IR beams — TX\u2081/RX\u2081 and TX\u2082/RX\u2082 — detect each drop in real time.
-          Transit time \u0394t between the beams is used to estimate drop velocity and volume without nurse interaction.
-        </p>
-
-        {/* Dark sim panel */}
-        <div style={{
-          borderRadius:12, overflow:"hidden",
-          border:"1.5px solid #1a2a1a",
-          boxShadow:"0 8px 32px rgba(0,0,0,0.25)",
-        }}>
-          <DripitoSim />
-        </div>
       </div>
     </div>
   );
