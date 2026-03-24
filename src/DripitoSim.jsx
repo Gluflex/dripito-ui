@@ -193,7 +193,7 @@ export default function DripitoSim({ onDrop }) {
                 const vEst = sphereVolume(dAvg);
 
                 s.dropCount++;
-                onDropRef.current?.();
+                onDropRef.current?.(vEst / 1000);   // pass estimated volume (mL)
                 const meas = {
                   idx: s.dropCount, dt: dt_transit * 1000,
                   v1: v1 / 1000, v2: v2 / 1000,

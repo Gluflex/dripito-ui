@@ -4,16 +4,9 @@ import DripitoSim from "./DripitoSim";
 const LCD_FONT_URL = "https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const DRIP_SETS = [
-  { label: "10 gtt/mL", gtt: 10, note: "Macro – rapid infusion" },
-  { label: "15 gtt/mL", gtt: 15, note: "Macro – standard adult" },
-  { label: "20 gtt/mL", gtt: 20, note: "Macro – standard adult" },
-  { label: "60 gtt/mL", gtt: 60, note: "Micro – paediatric/neonate" },
-];
-
-const FLOW_AVG_WINDOW = 5;
-const NO_FLOW_DEMO    = 8000;   // ms — short for demo
-const NO_FLOW_REAL    = 60000;  // ms — 60s real clinical
+const AVG_WINDOW           = 5;      // inter-drop intervals kept for moving average
+const NO_DROP_TIMEOUT_DEMO = 8000;   // ms — short for demo
+const NO_DROP_TIMEOUT_REAL = 60000;  // ms — 60s real clinical
 
 const S = {
   BOOT: "BOOT",
@@ -89,43 +82,36 @@ function Btn({ label, sublabel, color, bg, onClick, red }) {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function DripitoV2() {
-  // drip set
-  const [dripSetIdx, setDripSetIdx] = useState(2);
-  const dripSet = DRIP_SETS[dripSetIdx];
-  const GTT_PER_ML = dripSet.gtt;
+  // drop tracking (refs — no re-render on every drop, mirrors firmware ISR approach)
+  const dropBuffer   = useRef([]);   // last N {volMl, dtMs} entries for moving average
+  const lastDropTime = useRef(null);
+  const totalVolRef  = useRef(0);    // running total infused volume (mL)
+  const noFlowTimer  = useRef(null);
+  const startTime    = useRef(null);
 
-  // drop tracking (refs = no re-render on every drop like firmware would)
-  const intervalBuffer = useRef([]);   // last N inter-drop dt values (ms)
-  const lastDropTime   = useRef(null);
-  const noFlowTimer    = useRef(null);
-  const startTime      = useRef(null);
-
-  // reactive state
-  const [dropCount,    setDropCount]    = useState(0);
-  const [flowMlh,      setFlowMlh]      = useState(0);    // moving-avg
-  const [instFlowMlh,  setInstFlowMlh]  = useState(0);    // single-interval
-  const [totalMl,      setTotalMl]      = useState(0);
-  const [elapsedMs,    setElapsedMs]    = useState(0);
-
+  // reactive state — flow values in mL/h, volume in mL
+  const [dropCount,  setDropCount]  = useState(0);
+  const [avgFlow,    setAvgFlow]    = useState(0);   // moving-average flow rate (mL/h)
+  const [instFlow,   setInstFlow]   = useState(0);   // single-interval flow rate (mL/h)
+  const [infusedVol, setInfusedVol] = useState(0);   // total volume delivered (mL)
+  const [elapsedMs,  setElapsedMs]  = useState(0);
 
   // UI state
-  const [screen,    setScreen]    = useState(S.BOOT);
-  const [infoMode,  setInfoMode]  = useState(0);
-  const [armedFlow, setArmedFlow] = useState(null);
-  const [demoMode,  setDemoMode]  = useState(true);
-  const [blink,     setBlink]     = useState(true);
-  const [blinkFast, setBlinkFast] = useState(true);
+  const [screen,      setScreen]      = useState(S.BOOT);
+  const [infoMode,    setInfoMode]    = useState(0);
+  const [targetFlow,  setTargetFlow]  = useState(null); // armed alarm target (mL/h)
+  const [demoMode,    setDemoMode]    = useState(true);
+  const [blink,       setBlink]       = useState(true);
+  const [blinkFast,   setBlinkFast]   = useState(true);
 
   const bootDone = useRef(false);
   const measDone = useRef(false);
 
-  // local copies for use inside callbacks without stale closure issues
-  const armedFlowRef  = useRef(null);
-  const gttRef        = useRef(GTT_PER_ML);
+  // refs for stale-closure-safe access inside callbacks
+  const targetFlowRef = useRef(null);
   const screenRef     = useRef(S.BOOT);
-  armedFlowRef.current = armedFlow;
-  gttRef.current       = GTT_PER_ML;
-  screenRef.current    = screen;
+  targetFlowRef.current = targetFlow;
+  screenRef.current     = screen;
 
   // blink tickers
   useEffect(() => {
@@ -160,7 +146,7 @@ export default function DripitoV2() {
   // no-flow watchdog
   const resetNoFlowTimer = useCallback(() => {
     if (noFlowTimer.current) clearTimeout(noFlowTimer.current);
-    const timeout = demoMode ? NO_FLOW_DEMO : NO_FLOW_REAL;
+    const timeout = demoMode ? NO_DROP_TIMEOUT_DEMO : NO_DROP_TIMEOUT_REAL;
     noFlowTimer.current = setTimeout(() => setScreen(S.ALARM_NOFLOW), timeout);
   }, [demoMode]);
 
@@ -171,56 +157,52 @@ export default function DripitoV2() {
   }, [screen, resetNoFlowTimer]);
 
   // ── Core drop handler (mirrors EXTI ISR + flow calc in firmware) ──────────
-  const registerDrop = useCallback(() => {
+  const registerDrop = useCallback((volMl = 0.05) => {
     const now    = Date.now();
-    const gtt    = gttRef.current;
-    const armed  = armedFlowRef.current;
+    const target = targetFlowRef.current;
     const curScr = screenRef.current;
 
-    // Only register drops in monitoring screens
-    const valid = [S.MAIN,S.ARMED,S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.MEASURING];
-    if (!valid.includes(curScr)) return;
+    const validScreens = [S.MAIN,S.ARMED,S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.MEASURING];
+    if (!validScreens.includes(curScr)) return;
 
-    // Reset no-flow watchdog
     resetNoFlowTimer();
 
-    // Compute flow
-    let newInst = 0;
-    let newAvg  = 0;
+    // Compute instantaneous and moving-average flow rate (mL/h)
+    let newInstFlow = 0;
+    let newAvgFlow  = 0;
 
     if (lastDropTime.current !== null) {
-      const dt = now - lastDropTime.current;             // ms between drops
-      newInst  = (3600 * 1000) / (dt * gtt);            // mL/h instantaneous
+      const dtMs  = now - lastDropTime.current;         // inter-drop interval (ms)
+      newInstFlow = (volMl * 3_600_000) / dtMs;         // mL/h from single drop
 
-      intervalBuffer.current.push(dt);
-      if (intervalBuffer.current.length > FLOW_AVG_WINDOW)
-        intervalBuffer.current.shift();
+      dropBuffer.current.push({ volMl, dtMs });
+      if (dropBuffer.current.length > AVG_WINDOW) dropBuffer.current.shift();
 
-      const avgDt = intervalBuffer.current.reduce((a,b)=>a+b,0) / intervalBuffer.current.length;
-      newAvg = (3600 * 1000) / (avgDt * gtt);           // mL/h moving avg
+      // Average flow = total volume in window / total time in window
+      const bufVol  = dropBuffer.current.reduce((s, d) => s + d.volMl, 0);
+      const bufTime = dropBuffer.current.reduce((s, d) => s + d.dtMs,  0);
+      newAvgFlow = (bufVol * 3_600_000) / bufTime;
     }
     lastDropTime.current = now;
 
-    // Update reactive state via functional updaters to avoid stale closures
-    setDropCount(prev => {
-      const n = prev + 1;
-      setTotalMl(n / gtt);
-      return n;
-    });
-    setInstFlowMlh(Math.round(newInst * 10) / 10);
-    setFlowMlh(Math.round(newAvg  * 10) / 10);
+    // Accumulate delivered volume and drop count
+    totalVolRef.current += volMl;
+    setInfusedVol(Math.round(totalVolRef.current * 1000) / 1000);
+    setDropCount(prev => prev + 1);
+    setInstFlow(Math.round(newInstFlow * 10) / 10);
+    setAvgFlow(Math.round(newAvgFlow   * 10) / 10);
 
-    // Alarm logic (only when armed and we have enough drops for avg)
-    if (armed !== null && intervalBuffer.current.length >= 1) {
-      const dev = Math.abs(newAvg - armed) / armed;
+    // Alarm logic — evaluate deviation from armed target
+    if (target !== null && dropBuffer.current.length >= 1) {
+      const deviation = Math.abs(newAvgFlow - target) / target;
       setScreen(prev => {
         if (prev === S.ALARM_NOFLOW) return S.ARMED;
-        if (dev >= 0.25) return S.ALARM_HIGH;
-        if (dev >= 0.15) return S.ALARM_WARN;
+        if (deviation >= 0.25) return S.ALARM_HIGH;
+        if (deviation >= 0.15) return S.ALARM_WARN;
         return S.ARMED;
       });
     } else if (curScr === S.ALARM_NOFLOW) {
-      setScreen(armedFlowRef.current ? S.ARMED : S.MAIN);
+      setScreen(targetFlowRef.current ? S.ARMED : S.MAIN);
     }
   }, [resetNoFlowTimer]);
 
@@ -232,16 +214,6 @@ export default function DripitoV2() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [registerDrop]);
-
-  // recalculate flow when drip set changes
-  useEffect(() => {
-    if (intervalBuffer.current.length > 0) {
-      const avgDt = intervalBuffer.current.reduce((a,b)=>a+b,0) / intervalBuffer.current.length;
-      setFlowMlh(Math.round((3600*1000)/(avgDt*GTT_PER_ML)*10)/10);
-    }
-    setDropCount(prev => { setTotalMl(prev / GTT_PER_ML); return prev; });
-  // eslint-disable-next-line
-  }, [GTT_PER_ML]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const eTotal = elapsedMs / 1000;
@@ -258,38 +230,37 @@ export default function DripitoV2() {
   const alLv = alarmLevel();
 
   function devPct() {
-    if (!armedFlow||flowMlh===0) return 0;
-    return (flowMlh-armedFlow)/armedFlow*100;
+    if (!targetFlow || avgFlow === 0) return 0;
+    return (avgFlow - targetFlow) / targetFlow * 100;
   }
   const devP = devPct();
 
   function infoRow() {
-    if (infoMode===0) return `Infsd:${totalMl.toFixed(1).padStart(5," ")} mL`;
+    if (infoMode===0) return `Vol: ${infusedVol.toFixed(1).padStart(5," ")} mL`;
     if (infoMode===1) return `Time: ${eH}:${eM}:${eS}`;
     return `Drops: ${String(dropCount).padStart(5," ")}  `;
   }
 
   function getLines() {
-    const flow = flowMlh>0 ? String(Math.round(flowMlh)).padStart(4," ")
-                           : (screen===S.MEASURING ? "----" : "   0");
+    const flow = avgFlow > 0 ? String(Math.round(avgFlow)).padStart(4," ")
+                             : (screen===S.MEASURING ? "----" : "   0");
     const bat  = `BAT:${batPct}%`;
-    const gttStr = String(GTT_PER_ML).padStart(2,"0");
 
     switch(screen) {
-      case S.BOOT:       return ["                ","  Dripito  V2   ","    ETHZ GHE    ", blink?"                ":"   Loading...   "];
-      case S.MEASURING:  return ["-- Measuring -- ",`Flow:${flow} mL/h`,`Drops: ${String(dropCount).padStart(5," ")}   `, blink?"  Please wait.. ":"  Stabilising.. "];
-      case S.MAIN:       return [`Flow:${flow} mL/h`, infoRow(),`${bat}  ${gttStr}gtt/mL`,"[ALM]arm [MODE] "];
-      case S.ARMED:      return [`Flow:${flow} mL/h`, infoRow(),`Tgt:${String(Math.round(armedFlow)).padStart(4," ")} ${bat}  `,"[ALM]off [MODE] "];
+      case S.BOOT:         return ["                ","  Dripito  V2   ","    ETHZ GHE    ", blink?"                ":"   Loading...   "];
+      case S.MEASURING:    return ["-- Measuring -- ",`Flow:${flow} mL/h`,`Drops: ${String(dropCount).padStart(5," ")}   `, blink?"  Please wait.. ":"  Stabilising.. "];
+      case S.MAIN:         return [`Flow:${flow} mL/h`, infoRow(), `${bat}            `, "[ALM]arm [MODE] "];
+      case S.ARMED:        return [`Flow:${flow} mL/h`, infoRow(), `Tgt:${String(Math.round(targetFlow)).padStart(4," ")} ${bat}  `, "[ALM]off [MODE] "];
       case S.ALARM_WARN: {
         const sign=devP>=0?"+":"-"; const p=Math.abs(devP).toFixed(0).padStart(2," ");
-        return [blinkFast?"> RATE SHIFT <  ":`Flow:${flow} mL/h`,`Dev:${sign}${p}%      `,`Tgt:${String(Math.round(armedFlow)).padStart(4," ")} mL/h  `,"[ALM] silence   "];
+        return [blinkFast?"> RATE SHIFT <  ":`Flow:${flow} mL/h`, `Dev:${sign}${p}%      `, `Tgt:${String(Math.round(targetFlow)).padStart(4," ")} mL/h  `, "[ALM] silence   "];
       }
       case S.ALARM_HIGH: {
         const sign=devP>=0?"+":"-"; const p=Math.abs(devP).toFixed(0).padStart(2," ");
-        return [blinkFast?"!! RATE ALARM !!":"                ",`Flow:${flow} mL/h`,`Dev:${sign}${p}%    !!!`,"[ALM] silence   "];
+        return [blinkFast?"!! RATE ALARM !!":"                ", `Flow:${flow} mL/h`, `Dev:${sign}${p}%    !!!`, "[ALM] silence   "];
       }
-      case S.ALARM_NOFLOW: return [blinkFast?"!! NO  FLOW !!!!":"                ",`Last:${String(Math.round(armedFlow||flowMlh)).padStart(4," ")} mL/h`,`${totalMl.toFixed(1).padStart(5," ")} mL infused`,"[ALM] silence   "];
-      case S.ALARM_LOWBAT: return [blinkFast?"!! LOW BATTERY !":"LOW BATTERY     ",`BAT: ~${batPct}% left   `,`${totalMl.toFixed(1).padStart(5," ")} mL infused`,"[ALM] silence   "];
+      case S.ALARM_NOFLOW: return [blinkFast?"!! NO  FLOW !!!!":"                ", `Last:${String(Math.round(targetFlow||avgFlow)).padStart(4," ")} mL/h`, `${infusedVol.toFixed(1).padStart(5," ")} mL infused`, "[ALM] silence   "];
+      case S.ALARM_LOWBAT: return [blinkFast?"!! LOW BATTERY !":"LOW BATTERY     ", `BAT: ~${batPct}% left   `, `${infusedVol.toFixed(1).padStart(5," ")} mL infused`, "[ALM] silence   "];
       default: return ["","","",""];
     }
   }
@@ -298,32 +269,30 @@ export default function DripitoV2() {
   function handleMode() {
     if ([S.MAIN,S.ARMED].includes(screen)) setInfoMode(m=>(m+1)%3);
     else if ([S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.ALARM_LOWBAT].includes(screen))
-      setScreen(armedFlow?S.ARMED:S.MAIN);
+      setScreen(targetFlow ? S.ARMED : S.MAIN);
   }
   function handleAlarm() {
-    if ([S.MAIN,S.MEASURING].includes(screen) && flowMlh>0) {
-      setArmedFlow(flowMlh); setScreen(S.ARMED);           // arm
+    if ([S.MAIN,S.MEASURING].includes(screen) && avgFlow > 0) {
+      setTargetFlow(avgFlow); setScreen(S.ARMED);          // arm to current avg flow
     } else if (screen===S.ARMED) {
-      setArmedFlow(null); setScreen(S.MAIN);               // disarm
+      setTargetFlow(null); setScreen(S.MAIN);              // disarm
     } else if ([S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.ALARM_LOWBAT].includes(screen)) {
-      setScreen(armedFlow?S.ARMED:S.MAIN);                 // silence
+      setScreen(targetFlow ? S.ARMED : S.MAIN);            // silence alarm
     }
   }
 
   function hardReset() {
-    intervalBuffer.current=[]; lastDropTime.current=null; startTime.current=null;
+    dropBuffer.current=[]; lastDropTime.current=null; startTime.current=null; totalVolRef.current=0;
     if(noFlowTimer.current) clearTimeout(noFlowTimer.current);
-    setDropCount(0); setFlowMlh(0); setInstFlowMlh(0); setTotalMl(0); setElapsedMs(0);
-    setArmedFlow(null); bootDone.current=false; measDone.current=false; setScreen(S.BOOT);
+    setDropCount(0); setAvgFlow(0); setInstFlow(0); setInfusedVol(0); setElapsedMs(0);
+    setTargetFlow(null); bootDone.current=false; measDone.current=false; setScreen(S.BOOT);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
-  const alarmBg = [S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.ALARM_LOWBAT].includes(screen)
-    ? "#f0e0e0" : screen===S.ARMED ? "#fff8e0" : flowMlh>0 ? "#e0f0e0" : "#e8e8e8";
-  const alarmColor = [S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.ALARM_LOWBAT].includes(screen)
-    ? "#aa1111" : screen===S.ARMED ? "#8a6a00" : flowMlh>0 ? "#1a6a1a" : "#888";
-  const alarmSublabel = [S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.ALARM_LOWBAT].includes(screen)
-    ? "silence" : screen===S.ARMED ? "disarm" : "arm";
+  const isAlarming = [S.ALARM_WARN,S.ALARM_HIGH,S.ALARM_NOFLOW,S.ALARM_LOWBAT].includes(screen);
+  const alarmBg       = isAlarming ? "#f0e0e0" : screen===S.ARMED ? "#fff8e0" : avgFlow>0 ? "#e0f0e0" : "#e8e8e8";
+  const alarmColor    = isAlarming ? "#aa1111" : screen===S.ARMED ? "#8a6a00" : avgFlow>0 ? "#1a6a1a" : "#888";
+  const alarmSublabel = isAlarming ? "silence"  : screen===S.ARMED ? "disarm"  : "arm";
 
   return (
     <div style={{ minHeight:"100vh", background:"#0f1210",
@@ -340,11 +309,22 @@ export default function DripitoV2() {
         <div style={{ fontSize:10, color:"#4a6a4a", marginTop:1 }}>EA DOGS164W-A · 4×16 · STM32G030 · Real drop-counting logic</div>
       </div>
 
-      {/* ── 3-column main layout ── */}
+      {/* ── 3-column layout: IV setup | Dripito device | Live data ── */}
       <div style={{ maxWidth:1400, margin:"0 auto",
-        display:"grid", gridTemplateColumns:"270px 300px 1fr", gap:14, alignItems:"start" }}>
+        display:"grid", gridTemplateColumns:"minmax(0,1fr) 240px 270px", gap:14, alignItems:"start" }}>
 
-        {/* ── COL 1: Device ── */}
+        {/* ── COL 1: IV drip chamber + dual-beam sensor ── */}
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ fontSize:10, letterSpacing:"0.16em", color:"#4a7a4a", textTransform:"uppercase" }}>
+            IV Drip Chamber — Dual-Beam IR Sensor
+          </div>
+          <div style={{ borderRadius:10, overflow:"hidden", border:"1.5px solid #1a2a1a",
+            boxShadow:"0 4px 24px rgba(0,0,0,0.5)" }}>
+            <DripitoSim onDrop={registerDrop} />
+          </div>
+        </div>
+
+        {/* ── COL 2: Dripito device ── */}
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
 
           {/* Dripito casing — intentionally white */}
@@ -364,7 +344,7 @@ export default function DripitoV2() {
               <Btn label="MODE" sublabel="view/nav" onClick={handleMode}/>
               <Btn label="ALARM" sublabel={alarmSublabel} bg={alarmBg} color={alarmColor} onClick={handleAlarm}/>
             </div>
-            <div style={{ textAlign:"center", marginTop:9, fontSize:9, color:"#bbb" }}>↓ CLIP-ON · IV DRIP CHAMBER ↓</div>
+            <div style={{ textAlign:"center", marginTop:9, fontSize:9, color:"#bbb" }}>← CLIP-ON · IV DRIP CHAMBER</div>
           </div>
 
           {/* Screen jumps */}
@@ -379,7 +359,7 @@ export default function DripitoV2() {
                 <button key={s} onClick={() => {
                   if(s===S.BOOT){bootDone.current=false;}
                   if(s===S.MEASURING){measDone.current=false;}
-                  if([S.ARMED,S.ALARM_WARN,S.ALARM_HIGH].includes(s)&&flowMlh>0) setArmedFlow(flowMlh);
+                  if([S.ARMED,S.ALARM_WARN,S.ALARM_HIGH].includes(s)&&avgFlow>0) setTargetFlow(avgFlow);
                   setScreen(s);
                 }} style={{
                   background:screen===s?"#1a3a1a":"#161d16",
@@ -393,73 +373,25 @@ export default function DripitoV2() {
           </div>
         </div>
 
-        {/* ── COL 2: Controls ── */}
+        {/* ── COL 3: Live data ── */}
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-
-          {/* Drop simulator */}
-          <div style={{ background:"#161d16", border:"1.5px solid #2a402a", borderRadius:10, padding:"14px",
-            boxShadow:"0 2px 8px rgba(0,0,0,0.4)" }}>
-            <div style={{ fontSize:10, letterSpacing:"0.15em", color:"#5a9a5a", marginBottom:10, textTransform:"uppercase" }}>
-              Drop Simulator
-            </div>
-            <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}>
-              <button onMouseDown={() => registerDrop()}
-                style={{ background:"linear-gradient(180deg,#2a8a2a 0%,#1a6a1a 100%)",
-                  border:"none", borderBottom:"4px solid #0a4a0a", borderRadius:"50%",
-                  width:72, height:72, color:"#fff",
-                  fontFamily:"'Share Tech Mono',monospace", fontSize:"10px", fontWeight:"700",
-                  cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center",
-                  justifyContent:"center", boxShadow:"0 4px 12px rgba(0,0,0,0.3)",
-                  userSelect:"none", outline:"none", lineHeight:1.4 }}>
-                <span style={{ fontSize:18 }}>💧</span>
-                <span>DROP</span>
-              </button>
-            </div>
-            <div style={{ textAlign:"center", fontSize:9, color:"#5a7a5a", marginBottom:10 }}>
-              Click or&nbsp;
-              <kbd style={{ background:"#1e2a1e", border:"1px solid #3a5a3a", borderRadius:3, padding:"1px 5px", fontSize:9, color:"#8ab08a" }}>SPACE</kbd>
-            </div>
-            {/* Drip set */}
-            <div style={{ borderTop:"1px solid #2a3a2a", paddingTop:10 }}>
-              <div style={{ fontSize:10, letterSpacing:"0.13em", color:"#5a9a5a", marginBottom:7, textTransform:"uppercase" }}>Drip Set</div>
-              <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-                {DRIP_SETS.map((ds,i) => (
-                  <button key={i} onClick={() => setDripSetIdx(i)} style={{
-                    background: dripSetIdx===i?"#1a6a1a":"#1a221a",
-                    border:`1.5px solid ${dripSetIdx===i?"#2a8a2a":"#2a402a"}`,
-                    borderRadius:5, color:dripSetIdx===i?"#c8f0c8":"#5a8a5a",
-                    fontSize:10, padding:"4px 8px", cursor:"pointer",
-                    fontFamily:"'Share Tech Mono',monospace",
-                    fontWeight:dripSetIdx===i?"700":"400", transition:"all 0.1s", lineHeight:1.4,
-                  }}>
-                    <div style={{ fontWeight:700 }}>{ds.gtt} gtt</div>
-                    <div style={{ fontSize:8, opacity:0.75, marginTop:1 }}>{ds.note.split("–")[0].trim()}</div>
-                  </button>
-                ))}
-              </div>
-              <div style={{ fontSize:9, color:"#5a7a5a", marginTop:5 }}>
-                Active: <b style={{ color:"#7ab07a" }}>{dripSet.label}</b> — {dripSet.note}
-              </div>
-            </div>
-          </div>
 
           {/* Live stats */}
           <div style={{ background:"#161d16", border:"1px solid #2a3a2a", borderRadius:8, padding:"10px 14px",
             boxShadow:"0 1px 4px rgba(0,0,0,0.3)", fontSize:10.5 }}>
             <div style={{ fontSize:10, letterSpacing:"0.13em", color:"#5a9a5a", marginBottom:8, textTransform:"uppercase" }}>
-              Live Computed Values
+              Live Data
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"3px 14px", color:"#8ab08a", lineHeight:1.9 }}>
               {[
-                ["Avg flow",    flowMlh>0?`${flowMlh.toFixed(1)} mL/h`:"—",           "#44cc44"],
-                ["Inst flow",   instFlowMlh>0?`${instFlowMlh.toFixed(1)} mL/h`:"—",  "#44cc44"],
-                ["Total drops", String(dropCount),                                      "#44cc44"],
-                ["Total vol.",  `${totalMl.toFixed(2)} mL`,                            "#44cc44"],
-                ["Elapsed",     `${eH}:${eM}:${eS}`,                                  "#44cc44"],
-                ["Armed target",armedFlow?`${armedFlow.toFixed(1)} mL/h`:"—",          armedFlow?"#5aee5a":"#555"],
-                ["Deviation",   armedFlow&&flowMlh>0?`${devP>=0?"+":""}${devP.toFixed(1)}%`:"—",
+                ["Avg flow rate",   avgFlow>0  ? `${avgFlow.toFixed(1)} mL/h`  : "—",  "#44cc44"],
+                ["Instant rate",    instFlow>0 ? `${instFlow.toFixed(1)} mL/h` : "—",  "#44cc44"],
+                ["Volume infused",  `${infusedVol.toFixed(2)} mL`,                       "#44cc44"],
+                ["Drop count",      String(dropCount),                                    "#44cc44"],
+                ["Elapsed time",    `${eH}:${eM}:${eS}`,                                 "#44cc44"],
+                ["Target flow",     targetFlow ? `${targetFlow.toFixed(1)} mL/h` : "—",  targetFlow?"#5aee5a":"#555"],
+                ["Deviation",       targetFlow&&avgFlow>0 ? `${devP>=0?"+":""}${devP.toFixed(1)}%` : "—",
                   alLv==="HIGH"?"#ff5533":alLv==="WARN"?"#ffaa22":"#44cc44"],
-                ["Drip factor", `${GTT_PER_ML} gtt/mL`,                               "#44cc44"],
               ].map(([k,v,vc]) => (
                 <>
                   <span key={k} style={{ color:"#4a7a4a" }}>{k}</span>
@@ -470,7 +402,7 @@ export default function DripitoV2() {
             <div style={{ marginTop:8, paddingTop:7, borderTop:"1px solid #2a3a2a", display:"flex", gap:8, alignItems:"center" }}>
               <label style={{ fontSize:9, color:"#5a7a5a", display:"flex", alignItems:"center", gap:4, cursor:"pointer" }}>
                 <input type="checkbox" checked={demoMode} onChange={e=>setDemoMode(e.target.checked)} style={{ accentColor:"#2a8a2a" }}/>
-                Demo: 8s no-flow timeout
+                Demo: 8s no-drop timeout
               </label>
               <button onClick={hardReset} style={{ marginLeft:"auto", background:"#2a1010",
                 border:"1px solid #6a2222", borderRadius:4, color:"#ee4444",
@@ -479,74 +411,6 @@ export default function DripitoV2() {
               </button>
             </div>
           </div>
-        </div>
-
-        {/* ── COL 3: Physics simulation ── */}
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          <div style={{ fontSize:10, letterSpacing:"0.16em", color:"#4a7a4a", textTransform:"uppercase" }}>
-            Physics Simulation — Dual-Beam IR Sensor
-          </div>
-          <div style={{ borderRadius:10, overflow:"hidden", border:"1.5px solid #1a2a1a",
-            boxShadow:"0 4px 24px rgba(0,0,0,0.5)" }}>
-            <DripitoSim onDrop={registerDrop} />
-          </div>
-        </div>
-      </div>
-
-      {/* ── Spec section ── */}
-      <div style={{ maxWidth:1400, margin:"16px auto 0" }}>
-
-        {/* 3 spec cards in a row */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14, marginBottom:14 }}>
-          {[
-            {
-              title:"Drop → Flow Algorithm", color:"#1a6a1a",
-              rows:[
-                ["Each drop",   "Timestamp in ms (equivalent to EXTI interrupt on STM32)"],
-                ["Inst. flow",  `dt = now − prev_ms  →  3 600 000 ÷ (dt × ${GTT_PER_ML}) = mL/h`],
-                ["Avg. flow",   `Moving average over last ${FLOW_AVG_WINDOW} inter-drop intervals`],
-                ["Total vol.",  `drop_count ÷ ${GTT_PER_ML} gtt/mL = mL infused`],
-                ["No-flow WD",  `${demoMode?"8 s (demo)":"60 s"} since last drop → ALARM_NOFLOW`],
-                ["Drip change", "Recalculates flow & volume instantly from existing buffer"],
-              ]
-            },
-            {
-              title:"Button Map", color:"#1a4a9a",
-              rows:[
-                ["MODE",  "Cycle info row: Infused / Elapsed / Drops · dismiss alarm → armed/main"],
-                ["ALARM", "Main: arm to current avg flow · Armed: disarm · Alarm: silence/dismiss"],
-                ["SPACE", "Keyboard shortcut: simulate a drop"],
-              ]
-            },
-            {
-              title:"Alarm Thresholds (Paediatric)", color:"#b85a00",
-              rows:[
-                ["±15% warn",    "Intermittent beep · row-1 blinks · nurse adjusts clamp"],
-                ["±25% alarm",   "Rapid continuous beep · full blink · urgent intervention"],
-                ["No flow",      `No drops for ${demoMode?"8 s (demo)":"60 s"} → highest priority`],
-                ["Low battery",  "Non-blocking, single beep every 60 s"],
-                ["Clinical ref", "IEC 60601-2-24 ±20% for pumps. ±15% warn tightened for paediatric (NICE CG174). Gravity sets show >85% obs outside ±10% (Atanda 2023)"],
-              ]
-            },
-          ].map(sec => (
-            <div key={sec.title} style={{ background:"#161d16", border:`1px solid ${sec.color}44`,
-              borderLeft:`3px solid ${sec.color}`, borderRadius:"0 7px 7px 0",
-              padding:"11px 14px", boxShadow:"0 1px 4px rgba(0,0,0,0.3)" }}>
-              <div style={{ fontSize:10, fontWeight:700, color:sec.color, letterSpacing:"0.12em", marginBottom:8, textTransform:"uppercase" }}>
-                {sec.title}
-              </div>
-              {sec.rows.map(([k,v],i) => (
-                <div key={i} style={{ display:"flex", gap:10, marginBottom:5, fontSize:10.5, lineHeight:1.55 }}>
-                  <span style={{ color:sec.color, minWidth:80, flexShrink:0, fontWeight:700 }}>{k}</span>
-                  <span style={{ color:"#8ab08a" }}>{v}</span>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-
-        {/* Alarm bands + reference table side by side */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
 
           {/* Alarm band visual */}
           <div style={{ background:"#161d16", border:"1px solid #2a3a2a", borderRadius:7, padding:"11px 14px", boxShadow:"0 1px 4px rgba(0,0,0,0.3)" }}>
@@ -554,9 +418,9 @@ export default function DripitoV2() {
               Alarm Bands
             </div>
             {(() => {
-              const c   = armedFlow||(flowMlh>0?flowMlh:100);
-              const lo25= (c*0.75).toFixed(1); const lo15=(c*0.85).toFixed(1);
-              const hi15= (c*1.15).toFixed(1); const hi25=(c*1.25).toFixed(1);
+              const ref = targetFlow || (avgFlow > 0 ? avgFlow : 100);
+              const lo25 = (ref*0.75).toFixed(1); const lo15 = (ref*0.85).toFixed(1);
+              const hi15 = (ref*1.15).toFixed(1); const hi25 = (ref*1.25).toFixed(1);
               return (
                 <div>
                   <div style={{ display:"flex", borderRadius:4, overflow:"hidden", fontSize:9, marginBottom:5 }}>
@@ -573,49 +437,71 @@ export default function DripitoV2() {
                     ))}
                   </div>
                   <div style={{ fontSize:9, color:"#5a7a5a", textAlign:"center", lineHeight:1.7 }}>
-                    Target: <b style={{ color:"#8ab08a" }}>{c.toFixed(1)}</b> mL/h {armedFlow?"(armed)":"(arm to update)"}
-                    {armedFlow&&flowMlh>0&&(
+                    Target: <b style={{ color:"#8ab08a" }}>{ref.toFixed(1)}</b> mL/h {targetFlow?"(armed)":"(arm to update)"}
+                    {targetFlow&&avgFlow>0&&(
                       <span style={{ marginLeft:8, fontWeight:700,
                         color:alLv==="HIGH"?"#ff5533":alLv==="WARN"?"#ffaa22":"#44cc44" }}>
-                        · {flowMlh.toFixed(1)} mL/h ({devP>=0?"+":""}{devP.toFixed(1)}%)
+                        · {avgFlow.toFixed(1)} mL/h ({devP>=0?"+":""}{devP.toFixed(1)}%)
                         → {alLv==="NONE"?"✓ OK":alLv==="WARN"?"⚠ WARN":"🔴 ALARM"}
                       </span>
                     )}
                   </div>
                   <div style={{ fontSize:8, color:"#3a5a3a", textAlign:"center", marginTop:3 }}>
-                    {GTT_PER_ML} gtt/mL · avg over last {FLOW_AVG_WINDOW} intervals
+                    avg over last {AVG_WINDOW} inter-drop intervals · volume from dual-beam sensor
                   </div>
                 </div>
               );
             })()}
           </div>
+        </div>
+      </div>
 
-          {/* Drop rate reference table */}
-          <div style={{ background:"#161d16", border:"1px solid #2a3a2a", borderRadius:7, padding:"11px 14px", boxShadow:"0 1px 4px rgba(0,0,0,0.3)" }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#7a9a7a", letterSpacing:"0.12em", marginBottom:8, textTransform:"uppercase" }}>
-              Reference: drops/min for target flow
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:"2px 0", fontSize:9 }}>
-              <div style={{ color:"#4a6a4a", borderBottom:"1px solid #2a3a2a", paddingBottom:3 }}>mL/h</div>
-              {DRIP_SETS.map(ds=>(
-                <div key={ds.gtt} style={{ color:dripSetIdx===DRIP_SETS.indexOf(ds)?"#44cc44":"#4a6a4a",
-                  fontWeight:dripSetIdx===DRIP_SETS.indexOf(ds)?"700":"400",
-                  borderBottom:"1px solid #2a3a2a", paddingBottom:3 }}>{ds.gtt}gtt</div>
+      {/* ── Spec section ── */}
+      <div style={{ maxWidth:1400, margin:"16px auto 0" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 }}>
+          {[
+            {
+              title:"Drop → Flow Algorithm", color:"#1a6a1a",
+              rows:[
+                ["Each drop",    "Dual-beam transit time → drop volume estimated (mm³ → mL)"],
+                ["Instant rate", "instFlow = volMl × 3 600 000 / dtMs  (mL/h)"],
+                ["Avg rate",     `Moving window: totalVol / totalTime over last ${AVG_WINDOW} drops`],
+                ["Vol. infused", "Running sum of measured drop volumes (mL)"],
+                ["No-drop WD",   `${demoMode?"8 s (demo)":"60 s"} without a detected drop → ALARM_NOFLOW`],
+              ]
+            },
+            {
+              title:"Button Map", color:"#1a4a9a",
+              rows:[
+                ["MODE",  "Cycle info row: Volume / Elapsed / Drop count · dismiss alarm"],
+                ["ALARM", "Main → arm to current avg flow rate · Armed → disarm · Alarm → silence"],
+              ]
+            },
+            {
+              title:"Alarm Thresholds (Paediatric)", color:"#b85a00",
+              rows:[
+                ["±15% deviation", "Intermittent beep · row-1 blinks · nurse adjusts clamp"],
+                ["±25% deviation", "Rapid continuous beep · full blink · urgent intervention"],
+                ["No flow",        `No drops detected for ${demoMode?"8 s (demo)":"60 s"} → highest priority`],
+                ["Low battery",    "Non-blocking, single beep every 60 s"],
+                ["Clinical ref",   "IEC 60601-2-24 · NICE CG174 · Atanda et al. PMC 2023"],
+              ]
+            },
+          ].map(sec => (
+            <div key={sec.title} style={{ background:"#161d16", border:`1px solid ${sec.color}44`,
+              borderLeft:`3px solid ${sec.color}`, borderRadius:"0 7px 7px 0",
+              padding:"11px 14px", boxShadow:"0 1px 4px rgba(0,0,0,0.3)" }}>
+              <div style={{ fontSize:10, fontWeight:700, color:sec.color, letterSpacing:"0.12em", marginBottom:8, textTransform:"uppercase" }}>
+                {sec.title}
+              </div>
+              {sec.rows.map(([k,v],i) => (
+                <div key={i} style={{ display:"flex", gap:10, marginBottom:5, fontSize:10.5, lineHeight:1.55 }}>
+                  <span style={{ color:sec.color, minWidth:90, flexShrink:0, fontWeight:700 }}>{k}</span>
+                  <span style={{ color:"#8ab08a" }}>{v}</span>
+                </div>
               ))}
-              {[20,40,60,80,100,125,150,200].map(rate=>(
-                [
-                  <div key={`r${rate}`} style={{ color:"#5a8a5a", padding:"2px 0", borderBottom:"1px solid #1e2a1e" }}>{rate}</div>,
-                  ...DRIP_SETS.map(ds=>{
-                    const dpm=(rate*ds.gtt/60).toFixed(1);
-                    const sel=dripSetIdx===DRIP_SETS.indexOf(ds);
-                    return <div key={`${rate}-${ds.gtt}`} style={{ color:sel?"#44cc44":"#4a6a4a",
-                      fontWeight:sel?"700":"400", padding:"2px 0", borderBottom:"1px solid #1e2a1e" }}>{dpm}</div>;
-                  })
-                ]
-              ))}
             </div>
-            <div style={{ fontSize:8, color:"#3a5a3a", marginTop:5 }}>Highlighted column = active drip set.</div>
-          </div>
+          ))}
         </div>
       </div>
 
