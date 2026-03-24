@@ -322,18 +322,18 @@ export default function DripitoV2() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight:"100vh", background:"#e8eae6",
-      backgroundImage:"radial-gradient(ellipse at 30% 0%,#dde8dd 0%,transparent 50%),radial-gradient(ellipse at 70% 100%,#dde0e8 0%,transparent 50%)",
-      fontFamily:"'Share Tech Mono','Courier New',monospace", color:"#1a2a1a", padding:"22px 14px" }}>
+    <div style={{ minHeight:"100vh", background:"#0f1210",
+      backgroundImage:"radial-gradient(ellipse at 30% 0%,#0d1a0d 0%,transparent 50%),radial-gradient(ellipse at 70% 100%,#0d1018 0%,transparent 50%)",
+      fontFamily:"'Share Tech Mono','Courier New',monospace", color:"#b0c8b0", padding:"22px 14px" }}>
       <style>{`@import url('${LCD_FONT_URL}');`}</style>
 
       {/* Header */}
       <div style={{ maxWidth:920, margin:"0 auto 18px" }}>
         <div style={{ display:"flex", alignItems:"baseline", gap:12 }}>
-          <span style={{ fontSize:22, fontWeight:700, color:"#1a4a1a" }}>Dripito V2</span>
-          <span style={{ fontSize:10, color:"#6a8a6a", letterSpacing:"0.16em" }}>UI SPEC · Rev-B · ETHZ GHE</span>
+          <span style={{ fontSize:22, fontWeight:700, color:"#44cc44" }}>Dripito V2</span>
+          <span style={{ fontSize:10, color:"#4a7a4a", letterSpacing:"0.16em" }}>UI SPEC · Rev-B · ETHZ GHE</span>
         </div>
-        <div style={{ fontSize:10, color:"#8a9a8a", marginTop:1 }}>EA DOGS164W-A · 4×16 · STM32G030 · Real drop-counting logic</div>
+        <div style={{ fontSize:10, color:"#4a6a4a", marginTop:1 }}>EA DOGS164W-A · 4×16 · STM32G030 · Real drop-counting logic</div>
       </div>
 
       <div style={{ maxWidth:920, margin:"0 auto", display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
@@ -367,9 +367,9 @@ export default function DripitoV2() {
           </div>
 
           {/* Drop simulator panel */}
-          <div style={{ background:"#fff", border:"1.5px solid #b8d8b8", borderRadius:10, padding:"14px",
-            boxShadow:"0 2px 8px rgba(0,0,0,0.07)" }}>
-            <div style={{ fontSize:10, letterSpacing:"0.15em", color:"#4a7a4a", marginBottom:12, textTransform:"uppercase" }}>
+          <div style={{ background:"#161d16", border:"1.5px solid #2a402a", borderRadius:10, padding:"14px",
+            boxShadow:"0 2px 8px rgba(0,0,0,0.4)" }}>
+            <div style={{ fontSize:10, letterSpacing:"0.15em", color:"#5a9a5a", marginBottom:12, textTransform:"uppercase" }}>
               Drop Simulator
             </div>
 
@@ -389,22 +389,22 @@ export default function DripitoV2() {
               </button>
             </div>
 
-            <div style={{ textAlign:"center", fontSize:9, color:"#6a8a6a", marginBottom:14 }}>
+            <div style={{ textAlign:"center", fontSize:9, color:"#5a7a5a", marginBottom:14 }}>
               Click or&nbsp;
-              <kbd style={{ background:"#f0f0ec", border:"1px solid #ccc", borderRadius:3, padding:"1px 5px", fontSize:9 }}>SPACE</kbd>
+              <kbd style={{ background:"#1e2a1e", border:"1px solid #3a5a3a", borderRadius:3, padding:"1px 5px", fontSize:9, color:"#8ab08a" }}>SPACE</kbd>
             </div>
 
             {/* Drip set selector */}
-            <div style={{ borderTop:"1px solid #e8ece8", paddingTop:12 }}>
-              <div style={{ fontSize:10, letterSpacing:"0.13em", color:"#4a7a4a", marginBottom:8, textTransform:"uppercase" }}>
+            <div style={{ borderTop:"1px solid #2a3a2a", paddingTop:12 }}>
+              <div style={{ fontSize:10, letterSpacing:"0.13em", color:"#5a9a5a", marginBottom:8, textTransform:"uppercase" }}>
                 Drip Set
               </div>
               <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                 {DRIP_SETS.map((ds,i) => (
                   <button key={i} onClick={() => setDripSetIdx(i)} style={{
-                    background: dripSetIdx===i?"#1a6a1a":"#f0f4f0",
-                    border:`1.5px solid ${dripSetIdx===i?"#1a6a1a":"#c8d8c8"}`,
-                    borderRadius:5, color:dripSetIdx===i?"#fff":"#3a5a3a",
+                    background: dripSetIdx===i?"#1a6a1a":"#1a221a",
+                    border:`1.5px solid ${dripSetIdx===i?"#2a8a2a":"#2a402a"}`,
+                    borderRadius:5, color:dripSetIdx===i?"#c8f0c8":"#5a8a5a",
                     fontSize:10, padding:"5px 10px", cursor:"pointer",
                     fontFamily:"'Share Tech Mono',monospace",
                     fontWeight:dripSetIdx===i?"700":"400", transition:"all 0.1s",
@@ -415,43 +415,43 @@ export default function DripitoV2() {
                   </button>
                 ))}
               </div>
-              <div style={{ fontSize:9, color:"#8aaa8a", marginTop:5 }}>
-                Active: <b>{dripSet.label}</b> — {dripSet.note}
+              <div style={{ fontSize:9, color:"#5a7a5a", marginTop:5 }}>
+                Active: <b style={{ color:"#7ab07a" }}>{dripSet.label}</b> — {dripSet.note}
               </div>
             </div>
           </div>
 
           {/* Live stats */}
-          <div style={{ background:"#fff", border:"1px solid #ddd", borderRadius:8, padding:"10px 14px",
-            boxShadow:"0 1px 4px rgba(0,0,0,0.05)", fontSize:10.5 }}>
-            <div style={{ fontSize:10, letterSpacing:"0.13em", color:"#6a8a6a", marginBottom:8, textTransform:"uppercase" }}>
+          <div style={{ background:"#161d16", border:"1px solid #2a3a2a", borderRadius:8, padding:"10px 14px",
+            boxShadow:"0 1px 4px rgba(0,0,0,0.3)", fontSize:10.5 }}>
+            <div style={{ fontSize:10, letterSpacing:"0.13em", color:"#5a9a5a", marginBottom:8, textTransform:"uppercase" }}>
               Live Computed Values
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"3px 14px", color:"#3a4a3a", lineHeight:1.9 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"3px 14px", color:"#8ab08a", lineHeight:1.9 }}>
               {[
-                ["Avg flow",    flowMlh>0?`${flowMlh.toFixed(1)} mL/h`:"—",           "#1a4a1a"],
-                ["Inst flow",   instFlowMlh>0?`${instFlowMlh.toFixed(1)} mL/h`:"—",  "#1a4a1a"],
-                ["Total drops", String(dropCount),                                      "#1a4a1a"],
-                ["Total vol.",  `${totalMl.toFixed(2)} mL`,                            "#1a4a1a"],
-                ["Elapsed",     `${eH}:${eM}:${eS}`,                                  "#1a4a1a"],
-                ["Armed target",armedFlow?`${armedFlow.toFixed(1)} mL/h`:"—",          armedFlow?"#1a6a1a":"#999"],
+                ["Avg flow",    flowMlh>0?`${flowMlh.toFixed(1)} mL/h`:"—",           "#44cc44"],
+                ["Inst flow",   instFlowMlh>0?`${instFlowMlh.toFixed(1)} mL/h`:"—",  "#44cc44"],
+                ["Total drops", String(dropCount),                                      "#44cc44"],
+                ["Total vol.",  `${totalMl.toFixed(2)} mL`,                            "#44cc44"],
+                ["Elapsed",     `${eH}:${eM}:${eS}`,                                  "#44cc44"],
+                ["Armed target",armedFlow?`${armedFlow.toFixed(1)} mL/h`:"—",          armedFlow?"#5aee5a":"#555"],
                 ["Deviation",   armedFlow&&flowMlh>0?`${devP>=0?"+":""}${devP.toFixed(1)}%`:"—",
-                  alLv==="HIGH"?"#cc2200":alLv==="WARN"?"#cc7700":"#2a8a2a"],
-                ["Drip factor", `${GTT_PER_ML} gtt/mL`,                               "#1a4a1a"],
+                  alLv==="HIGH"?"#ff5533":alLv==="WARN"?"#ffaa22":"#44cc44"],
+                ["Drip factor", `${GTT_PER_ML} gtt/mL`,                               "#44cc44"],
               ].map(([k,v,vc]) => (
                 <>
-                  <span key={k} style={{ color:"#6a8a6a" }}>{k}</span>
+                  <span key={k} style={{ color:"#4a7a4a" }}>{k}</span>
                   <b key={v} style={{ color:vc }}>{v}</b>
                 </>
               ))}
             </div>
-            <div style={{ marginTop:8, paddingTop:7, borderTop:"1px solid #eee", display:"flex", gap:8, alignItems:"center" }}>
-              <label style={{ fontSize:9, color:"#6a8a6a", display:"flex", alignItems:"center", gap:4, cursor:"pointer" }}>
-                <input type="checkbox" checked={demoMode} onChange={e=>setDemoMode(e.target.checked)} style={{ accentColor:"#1a6a1a" }}/>
+            <div style={{ marginTop:8, paddingTop:7, borderTop:"1px solid #2a3a2a", display:"flex", gap:8, alignItems:"center" }}>
+              <label style={{ fontSize:9, color:"#5a7a5a", display:"flex", alignItems:"center", gap:4, cursor:"pointer" }}>
+                <input type="checkbox" checked={demoMode} onChange={e=>setDemoMode(e.target.checked)} style={{ accentColor:"#2a8a2a" }}/>
                 Demo: 8s no-flow timeout
               </label>
-              <button onClick={hardReset} style={{ marginLeft:"auto", background:"#f8e8e8",
-                border:"1px solid #e0b0b0", borderRadius:4, color:"#aa2222",
+              <button onClick={hardReset} style={{ marginLeft:"auto", background:"#2a1010",
+                border:"1px solid #6a2222", borderRadius:4, color:"#ee4444",
                 fontSize:9, padding:"3px 8px", cursor:"pointer", fontFamily:"'Share Tech Mono',monospace" }}>
                 RESET
               </button>
@@ -460,7 +460,7 @@ export default function DripitoV2() {
 
           {/* Screen jumps */}
           <div>
-            <div style={{ fontSize:10, letterSpacing:"0.13em", color:"#6a8a6a", marginBottom:5 }}>JUMP TO SCREEN</div>
+            <div style={{ fontSize:10, letterSpacing:"0.13em", color:"#4a7a4a", marginBottom:5 }}>JUMP TO SCREEN</div>
             <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
               {[
                 {l:"Boot",s:S.BOOT},{l:"Measuring",s:S.MEASURING},{l:"Main",s:S.MAIN},
@@ -473,9 +473,9 @@ export default function DripitoV2() {
                   if([S.ARMED,S.ALARM_WARN,S.ALARM_HIGH].includes(s)&&flowMlh>0) setArmedFlow(flowMlh);
                   setScreen(s);
                 }} style={{
-                  background:screen===s?"#e0f0e0":"#f0f0ec",
-                  border:`1px solid ${screen===s?"#4a9a4a":"#ccc"}`,
-                  borderRadius:4, color:screen===s?"#1a6a1a":"#666",
+                  background:screen===s?"#1a3a1a":"#161d16",
+                  border:`1px solid ${screen===s?"#3a8a3a":"#2a402a"}`,
+                  borderRadius:4, color:screen===s?"#5aee5a":"#4a7a4a",
                   fontSize:9, padding:"3px 7px", cursor:"pointer",
                   fontFamily:"'Share Tech Mono',monospace",
                 }}>{l}</button>
@@ -486,7 +486,7 @@ export default function DripitoV2() {
 
         {/* ── RIGHT: spec ── */}
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-          <div style={{ fontSize:10, letterSpacing:"0.16em", color:"#6a8a6a", textTransform:"uppercase" }}>Design Specification</div>
+          <div style={{ fontSize:10, letterSpacing:"0.16em", color:"#4a7a4a", textTransform:"uppercase" }}>Design Specification</div>
 
           {/* Spec cards */}
           {[
@@ -522,24 +522,24 @@ export default function DripitoV2() {
               ]
             },
           ].map(sec => (
-            <div key={sec.title} style={{ background:"#fff", border:`1px solid ${sec.color}33`,
+            <div key={sec.title} style={{ background:"#161d16", border:`1px solid ${sec.color}44`,
               borderLeft:`3px solid ${sec.color}`, borderRadius:"0 7px 7px 0",
-              padding:"11px 14px", boxShadow:"0 1px 4px rgba(0,0,0,0.05)" }}>
+              padding:"11px 14px", boxShadow:"0 1px 4px rgba(0,0,0,0.3)" }}>
               <div style={{ fontSize:10, fontWeight:700, color:sec.color, letterSpacing:"0.12em", marginBottom:8, textTransform:"uppercase" }}>
                 {sec.title}
               </div>
               {sec.rows.map(([k,v],i) => (
                 <div key={i} style={{ display:"flex", gap:10, marginBottom:5, fontSize:10.5, lineHeight:1.55 }}>
                   <span style={{ color:sec.color, minWidth:80, flexShrink:0, fontWeight:700 }}>{k}</span>
-                  <span style={{ color:"#3a4a3a" }}>{v}</span>
+                  <span style={{ color:"#8ab08a" }}>{v}</span>
                 </div>
               ))}
             </div>
           ))}
 
           {/* Alarm band visual */}
-          <div style={{ background:"#fff", border:"1px solid #ddd", borderRadius:7, padding:"11px 14px", boxShadow:"0 1px 4px rgba(0,0,0,0.05)" }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#555", letterSpacing:"0.12em", marginBottom:10, textTransform:"uppercase" }}>
+          <div style={{ background:"#161d16", border:"1px solid #2a3a2a", borderRadius:7, padding:"11px 14px", boxShadow:"0 1px 4px rgba(0,0,0,0.3)" }}>
+            <div style={{ fontSize:10, fontWeight:700, color:"#7a9a7a", letterSpacing:"0.12em", marginBottom:10, textTransform:"uppercase" }}>
               Alarm Bands
             </div>
             {(() => {
@@ -561,17 +561,17 @@ export default function DripitoV2() {
                         fontWeight:seg.bold?"700":"400", lineHeight:1.4 }}>{seg.label}</div>
                     ))}
                   </div>
-                  <div style={{ fontSize:9, color:"#888", textAlign:"center", lineHeight:1.7 }}>
-                    Target: <b>{c.toFixed(1)}</b> mL/h {armedFlow?"(armed)":"(arm to update)"}
+                  <div style={{ fontSize:9, color:"#5a7a5a", textAlign:"center", lineHeight:1.7 }}>
+                    Target: <b style={{ color:"#8ab08a" }}>{c.toFixed(1)}</b> mL/h {armedFlow?"(armed)":"(arm to update)"}
                     {armedFlow&&flowMlh>0&&(
                       <span style={{ marginLeft:8, fontWeight:700,
-                        color:alLv==="HIGH"?"#cc2200":alLv==="WARN"?"#cc7700":"#2a8a2a" }}>
+                        color:alLv==="HIGH"?"#ff5533":alLv==="WARN"?"#ffaa22":"#44cc44" }}>
                         · {flowMlh.toFixed(1)} mL/h ({devP>=0?"+":""}{devP.toFixed(1)}%)
                         → {alLv==="NONE"?"✓ OK":alLv==="WARN"?"⚠ WARN":"🔴 ALARM"}
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize:8, color:"#aaa", textAlign:"center", marginTop:3 }}>
+                  <div style={{ fontSize:8, color:"#3a5a3a", textAlign:"center", marginTop:3 }}>
                     {GTT_PER_ML} gtt/mL · avg over last {FLOW_AVG_WINDOW} intervals
                   </div>
                 </div>
@@ -580,36 +580,36 @@ export default function DripitoV2() {
           </div>
 
           {/* Drop rate reference table */}
-          <div style={{ background:"#fff", border:"1px solid #ddd", borderRadius:7, padding:"11px 14px", boxShadow:"0 1px 4px rgba(0,0,0,0.05)" }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#555", letterSpacing:"0.12em", marginBottom:8, textTransform:"uppercase" }}>
+          <div style={{ background:"#161d16", border:"1px solid #2a3a2a", borderRadius:7, padding:"11px 14px", boxShadow:"0 1px 4px rgba(0,0,0,0.3)" }}>
+            <div style={{ fontSize:10, fontWeight:700, color:"#7a9a7a", letterSpacing:"0.12em", marginBottom:8, textTransform:"uppercase" }}>
               Reference: drops/min for target flow
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:"2px 0", fontSize:9 }}>
               {/* header */}
-              <div style={{ color:"#999", borderBottom:"1px solid #eee", paddingBottom:3 }}>mL/h</div>
+              <div style={{ color:"#4a6a4a", borderBottom:"1px solid #2a3a2a", paddingBottom:3 }}>mL/h</div>
               {DRIP_SETS.map(ds=>(
-                <div key={ds.gtt} style={{ color:dripSetIdx===DRIP_SETS.indexOf(ds)?"#1a6a1a":"#999",
+                <div key={ds.gtt} style={{ color:dripSetIdx===DRIP_SETS.indexOf(ds)?"#44cc44":"#4a6a4a",
                   fontWeight:dripSetIdx===DRIP_SETS.indexOf(ds)?"700":"400",
-                  borderBottom:"1px solid #eee", paddingBottom:3 }}>{ds.gtt}gtt</div>
+                  borderBottom:"1px solid #2a3a2a", paddingBottom:3 }}>{ds.gtt}gtt</div>
               ))}
               {[20,40,60,80,100,125,150,200].map(rate=>(
                 [
-                  <div key={`r${rate}`} style={{ color:"#3a5a3a", padding:"2px 0", borderBottom:"1px solid #f4f4f4" }}>{rate}</div>,
+                  <div key={`r${rate}`} style={{ color:"#5a8a5a", padding:"2px 0", borderBottom:"1px solid #1e2a1e" }}>{rate}</div>,
                   ...DRIP_SETS.map(ds=>{
                     const dpm=(rate*ds.gtt/60).toFixed(1);
                     const sel=dripSetIdx===DRIP_SETS.indexOf(ds);
-                    return <div key={`${rate}-${ds.gtt}`} style={{ color:sel?"#1a4a1a":"#6a8a6a",
-                      fontWeight:sel?"700":"400", padding:"2px 0", borderBottom:"1px solid #f4f4f4" }}>{dpm}</div>;
+                    return <div key={`${rate}-${ds.gtt}`} style={{ color:sel?"#44cc44":"#4a6a4a",
+                      fontWeight:sel?"700":"400", padding:"2px 0", borderBottom:"1px solid #1e2a1e" }}>{dpm}</div>;
                   })
                 ]
               ))}
             </div>
-            <div style={{ fontSize:8, color:"#aaa", marginTop:5 }}>Highlighted column = active drip set.</div>
+            <div style={{ fontSize:8, color:"#3a5a3a", marginTop:5 }}>Highlighted column = active drip set.</div>
           </div>
         </div>
       </div>
 
-      <div style={{ maxWidth:920, margin:"14px auto 0", fontSize:9, color:"#9aaa9a", textAlign:"center", lineHeight:1.8 }}>
+      <div style={{ maxWidth:920, margin:"14px auto 0", fontSize:9, color:"#3a5a3a", textAlign:"center", lineHeight:1.8 }}>
         Clinical: ±15% warn · ±25% alarm · NICE CG174 · IEC 60601-2-24 · Atanda et al. PMC 2023
       </div>
 
